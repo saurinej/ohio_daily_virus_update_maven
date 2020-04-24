@@ -2,6 +2,7 @@ package com.joey.ohio_daily_virus_update;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -34,16 +35,34 @@ import java.util.TreeMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
+import javax.activation.DataHandler;
 import javax.mail.Authenticator;
+import javax.mail.BodyPart;
 import javax.mail.Message;
 import javax.mail.MessagingException;
+import javax.mail.Multipart;
 import javax.mail.PasswordAuthentication;
 import javax.mail.Session;
 import javax.mail.Transport;
 import javax.mail.internet.AddressException;
 import javax.mail.internet.InternetAddress;
+import javax.mail.internet.MimeBodyPart;
 import javax.mail.internet.MimeMessage;
+import javax.mail.internet.MimeMultipart;
+import javax.mail.util.ByteArrayDataSource;
+
+import com.itextpdf.text.BaseColor;
+import com.itextpdf.text.Chunk;
+import com.itextpdf.text.Document;
+import com.itextpdf.text.DocumentException;
+import com.itextpdf.text.Element;
+import com.itextpdf.text.Paragraph;
+import com.itextpdf.text.Phrase;
+import com.itextpdf.text.pdf.PdfPCell;
+import com.itextpdf.text.pdf.PdfPTable;
+import com.itextpdf.text.pdf.PdfWriter;
 
 public class VirusUpdateDriver {
 		//data structures
@@ -63,7 +82,15 @@ public class VirusUpdateDriver {
 		//private static boolean totalOhioCount = true;
 		private static boolean includeHospitalizedCount = false;
 		private static boolean includeDeathCount = false;
-		private static Queue<String> counties = new LinkedList<>();
+		private static ArrayList<String> counties = new ArrayList<>();
+		
+		/*
+		 * A table in a pdf is used to convey data to user in email for new update
+		 * These two parameters will be used to adjust pdf formation around data preferences selected by user
+		 * Preferences are stored in includeHospitalizedCount and includeDeathCount booleans
+		 */
+		private static String[] columnTitles = {"Date", "Count", "", ""};
+		private static int columns = 2;
 		
 		private static Scanner in = new Scanner(System.in);
 		
@@ -142,7 +169,7 @@ public class VirusUpdateDriver {
 					//build body of email with data
 					String body = formEmailBody(includeHospitalizedCount, includeDeathCount, counties);
 					//initialize the log item
-					LogItem entry = new LogItem(date, body.toString());
+					LogItem entry = new LogItem(date, body);
 					//pass the email parameters to the email method
 					sendEmail(subject, body.toString(), emailFrom, password, emailTo, entry);
 					System.out.println("Email sent successfully on " + dateFormat.format(date.getTime()) + ". Enter \"1\" to terminate.");
@@ -152,11 +179,10 @@ public class VirusUpdateDriver {
 			};
 			
 			//sets delay and starts task to send email every day at 2:05pm according to Eastern Daylight Time
-			long delay = ChronoUnit.SECONDS.between(ZonedDateTime.now(ZoneId.of("America/New_York")), ZonedDateTime.of(LocalDate.now(), LocalTime.of(14, 05), ZoneId.of("America/New_York")));
+			long delay = ChronoUnit.SECONDS.between(ZonedDateTime.now(ZoneId.of("America/New_York")), ZonedDateTime.of(LocalDate.now(), LocalTime.of(12, 05), ZoneId.of("America/New_York")));
 			scheduler.scheduleAtFixedRate(task, delay, 86400, TimeUnit.SECONDS);
-			//user input for varying options
 			
-			//change menu to accept new features
+			//iterate through the menu 
 			int menuOption = 0;
 			while (menuOption != 1) {
 				System.out.println("\nMenu\n1 - Quit\n2 - Show log\n3 - Update email information\n4 - Choose data to send in email body\n5 - Update data"
@@ -275,13 +301,42 @@ public class VirusUpdateDriver {
 			//include hospitalized count?
 			System.out.println("Included hospitalized count for Ohio and counties in the email body? (Y/n): ");
 			if (in.next().toLowerCase().contains("y")) {
+				//only add one to columns for table formation if it was previously false
+				if (!includeHospitalizedCount) {
+					columns++;
+				}
+				//change values according to user respons
 				includeHospitalizedCount = true;
+				columnTitles[2] = "Hospitalized Count";
+			} else if (in.next().toLowerCase().contains("n")) {
+				//only subtract from columns if value was previously true
+				if (includeHospitalizedCount) {
+					columns--;
+				}
+				//change values according to user respons
+				includeHospitalizedCount = false;
+				columnTitles[2] = "";
 			}
 			
 			//include death count?
 			System.out.println("Included death count for Ohio and counties in the email body? (Y/n): ");
 			if (in.next().toLowerCase().contains("y")) {
+				//only add one to columns for table formation if it was previously false
+				if (!includeDeathCount) {
+					columns++;
+				}
+				//set new values according to user response
 				includeDeathCount = true;
+				columnTitles[3] = "Death Count";
+				
+			} else if (in.next().toLowerCase().contains("n")) {
+				//only subtract from columns if value was previously true
+				if (includeDeathCount) {
+					columns--;
+				}
+				//change values according to user response
+				includeDeathCount = false;
+				columnTitles[3] = "";
 			}
 			
 		}
@@ -297,7 +352,7 @@ public class VirusUpdateDriver {
 		 *  Day2
 		 *  	Data for Day2"
 		 */
-		private static String formEmailBody(boolean includeHospitalizedCount, boolean includeDeathCount, Queue<String> counties) {
+		private static String formEmailBody(boolean includeHospitalizedCount, boolean includeDeathCount, ArrayList<String> counties) {
 			
 			DateFormat dateFormat = new SimpleDateFormat("ddMMMyyyy");
 			
@@ -505,7 +560,8 @@ public class VirusUpdateDriver {
 				message.setFrom(new InternetAddress(emailFrom));
 				message.setRecipient(Message.RecipientType.TO, new InternetAddress(emailTo));
 				message.setSubject(subject);
-				message.setText(body);
+				attachPDF(message);
+				//message.setText(body);
 				message.setFileName(subject);
 			} catch (AddressException e) {
 				e.printStackTrace();
@@ -527,6 +583,240 @@ public class VirusUpdateDriver {
 			log.setSession(session);
 			
 			
+		}
+		
+		private static void attachPDF(Message message) {
+			//attach PDF
+			BodyPart m = new MimeBodyPart();
+			Multipart m2 = new MimeMultipart();
+			try {
+				//body
+				m.setText("Please see attached PDF for data.");
+				m2.addBodyPart(m);
+				
+				//attachment
+				m = new MimeBodyPart();
+				byte[] d = formPDF();
+				ByteArrayDataSource s = new ByteArrayDataSource(d, "application/pdf");
+				m.setDataHandler(new DataHandler(s));
+				m.setFileName("testPDF");
+				m2.addBodyPart(m);
+				message.setContent(m2);
+				
+			} catch (MessagingException e) {
+				e.printStackTrace();
+			}
+			
+		}
+		
+		/*
+		 * This method pulls data and formats it in a PDF using the itext library
+		 * It returns a byte[] that represents the formed PDF 
+		 */
+		private static byte[] formPDF() {
+			//create document object which we will add the pdf table to
+			Document doc = new Document();
+			//byte stream to hold pdf 
+			ByteArrayOutputStream o = new ByteArrayOutputStream();
+			try {
+				//additions to PDF will be written to byte stream
+				PdfWriter.getInstance(doc, o);
+			} catch (DocumentException e1) {
+				e1.printStackTrace();
+			}
+			
+			//create pdf table from data structures
+			PdfPTable[] tables = formTable();
+			
+			//write table to pdf
+			try {
+				//open document to write data
+				doc.open();
+				//write table to pdf
+				for (int i = 0; i < tables.length; i++) {
+					if (i == 0) {
+						Paragraph tableTitle = new Paragraph(15);
+						tableTitle.setSpacingAfter(10);
+						tableTitle.setSpacingBefore(50);
+						tableTitle.setAlignment(Element.ALIGN_CENTER);
+						Chunk title = new Chunk("Ohio Counts");
+						tableTitle.add(title);
+						doc.add(tableTitle);
+					} else if (i >= 1) {
+						Paragraph tableTitle = new Paragraph(15);
+						tableTitle.setSpacingAfter(50);
+						tableTitle.setSpacingBefore(50);
+						tableTitle.setAlignment(Element.ALIGN_CENTER);
+						Chunk title = new Chunk(counties.get(i - 1) + " County Counts");
+						tableTitle.add(title);
+						doc.add(tableTitle);
+					}
+					doc.add(tables[i]);
+				} //end for loop
+					
+			} catch (DocumentException e) {
+				e.printStackTrace();
+			} finally {
+				doc.close();
+			}
+			
+			return o.toByteArray();
+		}
+		
+		/*
+		 * Method to form table from data structures
+		 * Returns PdfPTable
+		 */
+		private static PdfPTable[] formTable() {
+			//create table array, one for total Ohio count and one for each included county
+			PdfPTable[] tables = new PdfPTable[1 + counties.size()];
+			for (int i = 0; i < tables.length; i++) {
+				tables[i] = new PdfPTable(columns);
+			}
+			
+			//adds headers to all tables
+			for (PdfPTable table: tables) {
+				//this stream formats and adds header row of table
+				Stream.of(columnTitles).forEach(columnTitle -> {
+					//create new cell
+					PdfPCell header = new PdfPCell();
+					//sets formatting
+					header.setBackgroundColor(BaseColor.LIGHT_GRAY);
+					header.setBorderWidth(1);
+					header.setHorizontalAlignment(Element.ALIGN_CENTER);
+					header.setVerticalAlignment(Element.ALIGN_CENTER);
+					//sets content
+					header.setPhrase(new Phrase(columnTitle));
+					//adds cell to table
+					table.addCell(header);
+			});
+			}
+			
+			
+			//for formatting date in cells
+			DateFormat dateFormat = new SimpleDateFormat("ddMMMyyyy");
+			//stores previous day count data
+			int previousDayCount= 0;
+			
+			//following adds all data to cells
+			//append previous version data 01Mar2020 to 05Apr2020
+			for (SingleDayCount d: previousVersionData) {
+				//format and add date cell
+				PdfPCell dateCell = new PdfPCell();
+				dateCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+				dateCell.setPhrase(new Phrase(dateFormat.format(d.getDate().getTime())));
+				tables[0].addCell(dateCell);
+				
+				//format and add count cell
+				int currentDayCount = d.getCaseCount();
+				int newCases = currentDayCount - previousDayCount;
+				PdfPCell countCell = new PdfPCell();
+				countCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+				countCell.setPhrase(new Phrase(currentDayCount + " (" + newCases + ")"));
+				tables[0].addCell(countCell);
+				//set new previous days count for next iteration
+				previousDayCount = currentDayCount;
+				
+				//add empty cells in hospitalized count and death count columns 
+				int empty = columns - 2;
+				for (int i = 0; i < empty; i++) {
+					tables[0].addCell(new PdfPCell());
+				}
+			} //end for loop
+			
+			//to keep track of daily increase for hospitalizations and deaths
+			int previousHospitalizedCount = 0;
+			int previousDeathCount = 0;
+			
+			//print new version data 06Apr2020 and after
+			for (Map.Entry<GregorianCalendar, TreeMap<String, County>> entry: dataByDay.entrySet()) {
+				//format and add date cell
+				PdfPCell dateCell = new PdfPCell();
+				dateCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+				dateCell.setPhrase(new Phrase(dateFormat.format(entry.getKey().getTime())));
+				tables[0].addCell(dateCell);
+				
+				//get total counts for a single reporting day
+				int totalCount = 0;
+				int totalHospitalized = 0;
+				int totalDeaths = 0;
+				for (Map.Entry<String, County> subentry: entry.getValue().entrySet()) {
+					totalCount += subentry.getValue().getCount();
+					totalHospitalized += subentry.getValue().getHospitalizedCount();
+					totalDeaths += subentry.getValue().getDeathCount();
+				}
+				int newCases = totalCount - previousDayCount;
+				int newHospitalized = totalHospitalized - previousHospitalizedCount;
+				int newDeaths = totalDeaths - previousDeathCount;
+				
+				//add total count cell
+				PdfPCell countCell = new PdfPCell();
+				countCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+				countCell.setPhrase(new Phrase(totalCount + " (" + newCases + ")"));
+				tables[0].addCell(countCell);
+				
+				//add hospitalizedCount and deathCount if necessary
+				if (includeHospitalizedCount) {
+					//add hospitalized count cell
+					PdfPCell hospitalizedCell = new PdfPCell();
+					hospitalizedCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+					hospitalizedCell.setPhrase(new Phrase(totalHospitalized + " (" + newHospitalized + ")"));
+					tables[0].addCell(hospitalizedCell);
+				}
+				if (includeDeathCount) {
+					//add death count cell
+					PdfPCell deathCell = new PdfPCell();
+					deathCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+					deathCell.setPhrase(new Phrase(totalDeaths + " (" + newDeaths + ")"));
+					tables[0].addCell(deathCell);
+				}
+				
+				previousDayCount = totalCount;
+				previousHospitalizedCount = totalHospitalized;
+				previousDeathCount = totalDeaths;
+				
+				
+					
+				//add county information if necessary
+				if (!counties.isEmpty()) {
+					
+					//iterate through counties array to create county tables
+					for (int i = 0; i < counties.size(); i++) {	
+						int index = i + 1;
+						
+						//add date cell
+						tables[index].addCell(dateCell);
+						
+						//get specific county counts
+						int countyCount = entry.getValue().get(counties.get(i)).getCount();
+						//add county count cell
+						PdfPCell countyCountCell = new PdfPCell();
+						countyCountCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+						countyCountCell.setPhrase(new Phrase(countyCount + ""));
+						tables[index].addCell(countyCountCell);
+						
+						if (includeHospitalizedCount) {
+							int countyHospitalized = entry.getValue().get(counties.get(i)).getHospitalizedCount();
+							//add county hospitalized count cell
+							PdfPCell countyHospitalizedCell = new PdfPCell();
+							countyHospitalizedCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+							countyHospitalizedCell.setPhrase(new Phrase(countyHospitalized + ""));
+							tables[index].addCell(countyHospitalizedCell);
+						}
+						
+						if (includeDeathCount) {
+							int countyDeaths = entry.getValue().get(counties.get(i)).getDeathCount();
+							//add county death count cell
+							PdfPCell countyDeathCell = new PdfPCell();
+							countyDeathCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+							countyDeathCell.setPhrase(new Phrase(countyDeaths + ""));
+							tables[index].addCell(countyDeathCell);
+						}
+					}
+				}
+			} //end for loop
+			
+			return tables;
 		}
 		
 		@Deprecated
