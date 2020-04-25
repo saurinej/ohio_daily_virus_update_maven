@@ -179,7 +179,7 @@ public class VirusUpdateDriver {
 			};
 			
 			//sets delay and starts task to send email every day at 2:05pm according to Eastern Daylight Time
-			long delay = ChronoUnit.SECONDS.between(ZonedDateTime.now(ZoneId.of("America/New_York")), ZonedDateTime.of(LocalDate.now(), LocalTime.of(12, 05), ZoneId.of("America/New_York")));
+			long delay = ChronoUnit.SECONDS.between(ZonedDateTime.now(ZoneId.of("America/New_York")), ZonedDateTime.of(LocalDate.now(), LocalTime.of(14, 05), ZoneId.of("America/New_York")));
 			scheduler.scheduleAtFixedRate(task, delay, 86400, TimeUnit.SECONDS);
 			
 			//iterate through the menu 
@@ -305,7 +305,7 @@ public class VirusUpdateDriver {
 				if (!includeHospitalizedCount) {
 					columns++;
 				}
-				//change values according to user respons
+				//change values according to user response
 				includeHospitalizedCount = true;
 				columnTitles[2] = "Hospitalized Count";
 			} else if (in.next().toLowerCase().contains("n")) {
@@ -313,7 +313,7 @@ public class VirusUpdateDriver {
 				if (includeHospitalizedCount) {
 					columns--;
 				}
-				//change values according to user respons
+				//change values according to user response
 				includeHospitalizedCount = false;
 				columnTitles[2] = "";
 			}
