@@ -76,7 +76,7 @@ public class VirusUpdateDriver {
 		//email parameters
 		private static String emailFrom;
 		private static String password;
-		private static String emailTo;
+		private static ArrayList<InternetAddress> emails = new ArrayList<>();
 		
 		//data representation parameters
 		//private static boolean totalOhioCount = true;
@@ -171,7 +171,7 @@ public class VirusUpdateDriver {
 					//initialize the log item
 					LogItem entry = new LogItem(date, body);
 					//pass the email parameters to the email method
-					sendEmail(subject, body.toString(), emailFrom, password, emailTo, entry);
+					sendEmail(subject, body.toString(), emailFrom, password, emails, entry);
 					System.out.println("Email sent successfully on " + dateFormat.format(date.getTime()) + ". Enter \"1\" to terminate.");
 					//add log entry to log
 					log.add(entry);
@@ -186,7 +186,7 @@ public class VirusUpdateDriver {
 			int menuOption = 0;
 			while (menuOption != 1) {
 				System.out.println("\nMenu\n1 - Quit\n2 - Show log\n3 - Update email information\n4 - Choose data to send in email body\n5 - Update data"
-						+ "\n6 - Print last email body");
+						+ "\n6 - Print last email data to console\n7 - Remove an email from mailing list");
 				
 				menuOption = in.nextInt();
 				
@@ -219,6 +219,9 @@ public class VirusUpdateDriver {
 								System.out.println(log.get(i).getBody());
 							}
 						}
+						break;
+					case 7:
+						changeMailingList();
 						break;
 				}
 			} //end while loop
@@ -300,7 +303,8 @@ public class VirusUpdateDriver {
 			
 			//include hospitalized count?
 			System.out.println("Included hospitalized count for Ohio and counties in the email body? (Y/n): ");
-			if (in.next().toLowerCase().contains("y")) {
+			String input = in.next().toLowerCase();
+			if (input.contains("y")) {
 				//only add one to columns for table formation if it was previously false
 				if (!includeHospitalizedCount) {
 					columns++;
@@ -308,7 +312,7 @@ public class VirusUpdateDriver {
 				//change values according to user response
 				includeHospitalizedCount = true;
 				columnTitles[2] = "Hospitalized Count";
-			} else if (in.next().toLowerCase().contains("n")) {
+			} else if (input.contains("n")) {
 				//only subtract from columns if value was previously true
 				if (includeHospitalizedCount) {
 					columns--;
@@ -320,7 +324,8 @@ public class VirusUpdateDriver {
 			
 			//include death count?
 			System.out.println("Included death count for Ohio and counties in the email body? (Y/n): ");
-			if (in.next().toLowerCase().contains("y")) {
+			input = in.next().toLowerCase();
+			if (input.contains("y")) {
 				//only add one to columns for table formation if it was previously false
 				if (!includeDeathCount) {
 					columns++;
@@ -329,7 +334,7 @@ public class VirusUpdateDriver {
 				includeDeathCount = true;
 				columnTitles[3] = "Death Count";
 				
-			} else if (in.next().toLowerCase().contains("n")) {
+			} else if (input.contains("n")) {
 				//only subtract from columns if value was previously true
 				if (includeDeathCount) {
 					columns--;
@@ -440,14 +445,29 @@ public class VirusUpdateDriver {
 				System.out.println("Please type the password for this email (note: less secure app access will likely need to be turned "
 						+ "on in the google account settings): ");
 				password = in.next().trim();
-				System.out.println("Please enter the email address that will receive the emails: ");
-				emailTo = in.next().trim();
+				boolean addAnother = true;
+				//skips step to add emails to send to if there are already emails to send to
+				if (!emails.isEmpty()) {
+					addAnother = false;
+				}
+				while (addAnother) {
+					System.out.println("Please enter an email address that will receive the emails: ");
+					try {
+						emails.add(new InternetAddress(in.next().trim()));
+					} catch (AddressException e) {
+						System.err.println("Could not parse the email address");
+					}
+					System.out.println("Would you like to add another email?(Y/n)");
+					if (in.next().toLowerCase().contains("n")) {
+						addAnother = false;
+					}
+				} //end while loop
 				
 				System.out.println("Would you like to verify the information? (Y/n)");
 				if (in.next().toLowerCase().contains("y")) {
 					System.out.print("Email address that will send the emails: " 
-						+ emailFrom + "\nPassword: " + password + "\nEmail address that will receive the emails: "
-						+ emailTo + "\nIs the following information correct? (Y/n): ");
+						+ emailFrom + "\nPassword: " + password + "\nEmail address(es) that will receive the emails: "
+						+ emails.toString() + "\nIs the following information correct? (Y/n): ");
 					if (in.next().toLowerCase().contains("y")) {
 						verify = false;
 					}
@@ -455,6 +475,54 @@ public class VirusUpdateDriver {
 					verify = false;
 				}
 			} //end while loop
+		}
+		
+		/*
+		 * Method to add or remove email addresses on the mailing list
+		 */
+		private static void changeMailingList() {
+			
+			System.out.println("Type \"add\" to add emails addresses and \"remove\" to remove emails addresses.");
+			String input = in.next().toLowerCase();
+			if (input.contains("add")) {
+				boolean addAnother = true;
+				while (addAnother) {
+					System.out.println("Please enter an email address that will receive the emails: ");
+					try {
+						emails.add(new InternetAddress(in.next().trim()));
+					} catch (AddressException e) {
+						System.err.println("Could not parse the email address");
+					}
+					System.out.println("Would you like to add another email?(Y/n)");
+					if (in.next().toLowerCase().contains("n")) {
+						addAnother = false;
+					}
+				} //end while loop
+			} else if (input.contains("remove")) {
+				boolean removeAnother = true;
+				while (removeAnother) {
+					int i = 1;
+					for (InternetAddress address: emails) {
+						if (i % 10 != 0) {
+							System.out.print(i + "-" + address.toString() + " ");
+						} else {
+							System.out.print(i + "-" + address.toString() + "\n");
+						}
+						i++;
+					} 
+					System.out.println("Please enter the number of the address to remove.");
+					int index = in.nextInt() - 1;
+					if (index >= 0 && index < emails.size()) {
+						emails.remove(index);
+					} else {
+						System.out.println("Please enter a valid number next time.");
+					}
+					System.out.println("Remove another?(Y/n)");
+					if (in.next().toLowerCase().contains("n")) {
+						removeAnother = false;
+					}
+				} //end while loop
+			}
 		}
 		
 		/*
@@ -535,7 +603,7 @@ public class VirusUpdateDriver {
 		 * Transports message
 		 * Updates LogItem variables 
 		 */
-		private static void sendEmail(String subject, String body, final String emailFrom,  final String password, String emailTo, LogItem log) {
+		private static void sendEmail(String subject, String body, final String emailFrom,  final String password, ArrayList<InternetAddress> emails, LogItem log) {
 			//set properties 
 			Properties props = new Properties();
 			props.put("mail.smtp.auth", "true");
@@ -554,11 +622,17 @@ public class VirusUpdateDriver {
 				}
 			});
 			
+			//InternetAddress array is constructed from emails ArrayList to pass to setRecipients method
+			InternetAddress[] addresses = new InternetAddress[emails.size()];
+			for (int i = 0; i < emails.size(); i++) {
+				addresses[i] = emails.get(i);
+			}
+			
 			//create message
 			Message message = new MimeMessage(session);
 			try {
 				message.setFrom(new InternetAddress(emailFrom));
-				message.setRecipient(Message.RecipientType.TO, new InternetAddress(emailTo));
+				message.setRecipients(Message.RecipientType.TO, addresses);
 				message.setSubject(subject);
 				attachPDF(message);
 				//message.setText(body);
