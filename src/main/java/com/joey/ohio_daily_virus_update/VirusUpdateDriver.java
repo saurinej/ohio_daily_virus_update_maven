@@ -761,8 +761,11 @@ public class VirusUpdateDriver {
 					header.setVerticalAlignment(Element.ALIGN_CENTER);
 					//sets content
 					header.setPhrase(new Phrase(columnTitle));
-					//adds cell to table
-					table.addCell(header);
+					//adds cell to table if it is not an empty string
+					if (!columnTitle.isEmpty()) {
+						table.addCell(header);
+					}
+					
 			});
 			}
 			
