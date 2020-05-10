@@ -1,5 +1,7 @@
 package com.joey.ohio_daily_virus_update;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
@@ -126,7 +128,7 @@ public class VirusUpdateDriver {
 			//creates input stream for County_Data_Over_Time.dat file and creates objects to store data
 			try{
 				//read in new version data
-				ObjectInputStream in = new ObjectInputStream(new FileInputStream("County_Data_Over_Time.dat"));
+				ObjectInputStream in = new ObjectInputStream(new BufferedInputStream(new FileInputStream("County_Data_Over_Time.dat")));
 				dataByDaySerialized = (TreeMap<GregorianCalendar, TreeMap<String, County>>)(in.readObject());
 				previousDataSerialized = (ArrayList<SingleDayCount>)(in.readObject());
 				in.close();
@@ -232,7 +234,7 @@ public class VirusUpdateDriver {
 				in.close();
 				//writes new data to file
 				try {
-					ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream("County_Data_Over_Time.dat"));
+					ObjectOutputStream out = new ObjectOutputStream(new BufferedOutputStream(new FileOutputStream("County_Data_Over_Time.dat")));
 					out.writeObject(dataByDay);
 					out.writeObject(previousVersionData);
 					out.close();
